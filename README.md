@@ -366,6 +366,10 @@ MIT License - See LICENSE file for details
 
 Built by Pransu Vadsmiya
 
+## Contributors
+
+Dhanush B. Pillai
+
 ## Acknowledgments
 
 - Built on FastAPI, ChromaDB, sentence-transformers
