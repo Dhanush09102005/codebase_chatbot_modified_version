@@ -10,7 +10,7 @@ Includes input sanitization validators for:
 - Repository/file paths (prevent path traversal)
 """
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field, field_validator, ValidationError
+from pydantic import BaseModel, Field, field_validator
 import re
 
 
@@ -252,11 +252,11 @@ class SourceReference(BaseModel):
     
     repository_name: str = Field(..., description="Repository name")
     file_path: str = Field(..., description="File path")
-    chunk_type: str = Field(..., description="Chunk type (function, class, etc.)")
-    chunk_name: str = Field(..., description="Function/class name")
-    line_start: int = Field(..., description="Start line number")
-    line_end: int = Field(..., description="End line number")
-    relevance_score: float = Field(..., description="Relevance score")
+    chunk_type: str = Field(default="unknown", description="Chunk type (function, class, etc.)")
+    chunk_name: str = Field(default="unknown", description="Function/class name")
+    line_start: int = Field(default=0, description="Start line number")
+    line_end: int = Field(default=0, description="End line number")
+    relevance_score: float = Field(default=0.0, description="Relevance score")
 
 
 class ChatResponse(BaseModel):

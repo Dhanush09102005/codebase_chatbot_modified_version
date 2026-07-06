@@ -255,6 +255,8 @@ async def index_repository(request: IndexRepositoryRequest):
             }
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Indexing failed: {e}")
         raise HTTPException(
@@ -366,12 +368,12 @@ async def chat(request: ChatRequest):
         sources = [
             SourceReference(
                 repository_name=result.repository_name or "unknown",
-                file_path=result.file_path,
-                chunk_type=result.chunk_type,
-                chunk_name=result.chunk_name,
-                line_start=result.line_start,
-                line_end=result.line_end,
-                relevance_score=result.combined_score
+                file_path=result.file_path or "unknown",
+                chunk_type=result.chunk_type or "unknown",
+                chunk_name=result.chunk_name or "unknown",
+                line_start=result.line_start or 0,
+                line_end=result.line_end or 0,
+                relevance_score=result.combined_score or 0.0,
             )
             for result in response.retrieval_context.results
         ]
@@ -435,7 +437,6 @@ async def list_repositories():
                 if repo_dir.is_dir() and not repo_dir.name.startswith('.'):
                     metadata_file = repo_dir / '.repo_metadata.json'
                     if metadata_file.exists():
-                        import json
                         with open(metadata_file, 'r') as f:
                             metadata = json.load(f)
                         # print(metadata)
