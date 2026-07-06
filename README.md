@@ -9,7 +9,11 @@ RAG-based chatbot for answering questions about codebases using semantic search 
 - **Hybrid Retrieval**: Vector similarity + BM25 keyword search + reranking
 - **Multi-Provider LLM**: HuggingFace, Groq, OpenAI, Ollama
 - **Progressive Enrichment**: Single object flows through entire pipeline
-- **Production-Ready**: FastAPI, proper error handling, logging, metrics
+- **Chat Session Memory**: Persistent conversation history with up to 10 saved sessions
+- **Global Exception Handling**: Structured error responses with traceable error IDs
+- **Request/Response Logging**: Per-request tracing with duration and status
+- **Rate Limiting**: Per-IP sliding window limits to prevent abuse
+- **Input Sanitization**: Validated and sanitized inputs on all endpoints
 
 ## Architecture
 
@@ -20,8 +24,13 @@ INDEXING (Offline):
 RAG CHAIN (Online):
   Question → Retriever → PromptBuilder → LLMClient → Answer
 
+CHAT SESSIONS:
+  POST /sessions → session_id
+  POST /chat (with session_id) → answer saved to SQLite history
+  GET /sessions/{id} → full conversation replay
+
 API LAYER:
-  HTTP Request → FastAPI → Services → HTTP Response
+  HTTP Request → Rate Limiter → Sanitization → FastAPI → Services → HTTP Response
 ```
 
 ## Installation
@@ -120,6 +129,99 @@ curl -X DELETE http://localhost:8000/api/v1/repositories/{repository_id}
 curl http://localhost:8000/api/v1/health
 ```
 
+#### 6. Create a Chat Session
+```bash
+curl -X POST http://localhost:8000/api/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"title": "FastAPI deep dive"}'
+```
+
+Returns a `session_id`. Pass this in subsequent `/chat` requests to maintain conversation context.
+
+#### 7. Chat with Session Memory
+```bash
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "question": "How does dependency injection work?",
+    "session_id": "<session_id from above>"
+  }'
+```
+
+#### 8. List Saved Sessions
+```bash
+curl http://localhost:8000/api/v1/sessions
+```
+
+#### 9. Get Full Session History
+```bash
+curl http://localhost:8000/api/v1/sessions/{session_id}
+```
+
+#### 10. Delete a Session
+```bash
+curl -X DELETE http://localhost:8000/api/v1/sessions/{session_id}
+```
+
+## Security & Reliability
+
+### 1. Global Exception Handler
+All unhandled exceptions are caught and returned as structured JSON:
+```json
+{
+  "error": "internal_server_error",
+  "message": "An unexpected error occurred. Please try again later.",
+  "error_id": "a3f5e8d1"
+}
+```
+Full traceback is logged to `app.log` with the same `error_id` for easy correlation. Special handling for timeout errors returns 504 Gateway Timeout.
+
+### 2. Request/Response Logging
+Every request and response is logged with:
+- Unique request ID (also returned in `X-Request-ID` header)
+- Client IP address
+- HTTP method and path
+- Status code and duration (in milliseconds)
+
+Example log:
+```
+[a3f5e8d1] → POST /api/v1/chat from 127.0.0.1
+[a3f5e8d1] ← 200 POST /api/v1/chat (1245.3ms)
+```
+
+### 3. Rate Limiting
+Per-IP sliding window rate limits (60-second window):
+- **Indexing** (`/repositories/index`): 3 requests/minute
+- **Chat** (`/chat`): 20 requests/minute
+- **Everything else**: 60 requests/minute
+
+When exceeded, returns `429 Too Many Requests` with `Retry-After: 60` header.
+
+### 4. Input Sanitization
+All user inputs are validated using Pydantic validators:
+
+**Repository URLs:**
+- Must be valid Git URLs (HTTPS/SSH)
+- Blocks `file://` and path traversal attempts
+
+**Branch names:**
+- Alphanumeric + safe characters only
+- Blocks shell injection patterns (`;`, `|`, `` ` ``)
+
+**Questions:**
+- Length: 3-2000 characters
+- Excessive repetition detection (DoS prevention)
+- Whitespace normalization
+
+**Session IDs:**
+- Must be valid UUID format
+
+**Repository/file names:**
+- Blocks path traversal (`../`, `..\\`)
+- Alphanumeric validation
+
+Invalid inputs return `422 Unprocessable Entity` before reaching endpoint handlers.
+
 ## Project Structure
 
 ```
@@ -127,6 +229,9 @@ curl http://localhost:8000/api/v1/health
 ├── app/
 │   ├── core/                 # Configuration, logging
 │   ├── ingestion/           # Repository loading, file scanning
+│   ├── chat/                # Chat session storage (SQLite)
+│   │   ├── chat_store.py    # Session CRUD operations
+│   │   └── __init__.py
 │   ├── rag/                 # RAG pipeline components
 │   │   ├── parser.py        # AST-based code parsing
 │   │   ├── ast_chunker.py   # Semantic chunking
@@ -137,6 +242,13 @@ curl http://localhost:8000/api/v1/health
 │   │   ├── prompt_builder.py # Prompt formatting
 │   │   └── rag_chain.py     # RAG orchestration
 │   └── api/                 # FastAPI endpoints
+│       ├── app.py           # Application + middleware
+│       ├── routes.py        # Endpoint handlers
+│       └── models.py        # Request/response models
+├── data/
+│   ├── chroma_db/           # ChromaDB vector storage
+│   ├── repos/               # Cloned repository cache
+│   └── chat_sessions.db     # SQLite session storage
 ├── main.py                  # Application entry point
 ├── requirements.txt         # Dependencies
 └── .env.example            # Configuration template
@@ -179,6 +291,47 @@ python test_rag_chain.py
 # Test API overview
 python test_api.py
 ```
+
+## Chat Session Memory
+
+The system supports **persistent conversation history** with up to **10 saved sessions**. Sessions are stored in SQLite and automatically include previous messages as context.
+
+### How It Works
+
+1. **Create a session**: `POST /sessions` returns a `session_id`
+2. **Chat with memory**: Pass the `session_id` in `/chat` requests
+3. **Context injection**: Last 10 messages are automatically injected into the LLM prompt
+4. **Auto-titling**: First user message becomes the session title
+5. **Auto-eviction**: When the 11th session is created, the oldest is deleted
+
+### Example Workflow
+
+```bash
+# 1. Create session
+SESSION_ID=$(curl -s -X POST http://localhost:8000/api/v1/sessions \
+  -H "Content-Type: application/json" \
+  -d '{}' | jq -r '.session_id')
+
+# 2. Ask follow-up questions with context
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"question\": \"How does FastAPI handle dependencies?\",
+    \"session_id\": \"$SESSION_ID\"
+  }"
+
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"question\": \"Can you show me an example?\",
+    \"session_id\": \"$SESSION_ID\"
+  }"
+
+# 3. Review history
+curl http://localhost:8000/api/v1/sessions/$SESSION_ID
+```
+
+The second question ("Can you show me an example?") is answered with full awareness of the first question about dependency injection.
 
 ## Tech Stack
 

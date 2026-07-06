@@ -6,7 +6,7 @@ This is the key differentiator: understanding code structure before chunking.
 """
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-import tree_sitter_languages
+import tree_sitter_language_pack as tree_sitter_languages
 
 from app.core import logger
 from app.ingestion import CodeFile, Language

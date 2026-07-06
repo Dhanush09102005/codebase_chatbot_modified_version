@@ -10,6 +10,7 @@ import time
 import json
 from app.core import logger, settings
 from app.ingestion import RepositoryManager, FileScanner
+from app.chat import ChatStore
 from app.rag import (
     CodeParser,
     ASTChunker,
@@ -31,10 +32,106 @@ from app.api.models import (
     ListRepositoriesResponse,
     DeleteRepositoryResponse,
     HealthCheck,
+    CreateSessionRequest,
+    SessionSummary,
+    SessionDetail,
+    MessageInfo,
+    ListSessionsResponse,
 )
 
 
 router = APIRouter()
+
+
+# ==============================================================================
+# Chat Sessions
+# ==============================================================================
+
+@router.post(
+    "/sessions",
+    response_model=SessionSummary,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a chat session",
+    description="Create a new chat session to track conversation history."
+)
+async def create_session(request: CreateSessionRequest):
+    """Create a new chat session."""
+    store = ChatStore()
+    session = store.create_session(title=request.title)
+    return SessionSummary(
+        session_id=session.session_id,
+        title=session.title,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+    )
+
+
+@router.get(
+    "/sessions",
+    response_model=ListSessionsResponse,
+    summary="List chat sessions",
+    description="List all saved chat sessions (up to 10), newest first."
+)
+async def list_sessions():
+    """List all chat sessions."""
+    store = ChatStore()
+    sessions = store.list_sessions()
+    return ListSessionsResponse(
+        sessions=[
+            SessionSummary(
+                session_id=s.session_id,
+                title=s.title,
+                created_at=s.created_at,
+                updated_at=s.updated_at,
+            )
+            for s in sessions
+        ],
+        total_count=len(sessions),
+    )
+
+
+@router.get(
+    "/sessions/{session_id}",
+    response_model=SessionDetail,
+    summary="Get session history",
+    description="Retrieve a session with its full message history."
+)
+async def get_session(session_id: str):
+    """Get a session and all its messages."""
+    store = ChatStore()
+    session = store.get_session(session_id)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
+    return SessionDetail(
+        session_id=session.session_id,
+        title=session.title,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+        messages=[
+            MessageInfo(role=m.role, content=m.content, timestamp=m.timestamp)
+            for m in session.messages
+        ],
+    )
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a chat session",
+    description="Permanently delete a session and its history."
+)
+async def delete_session(session_id: str):
+    """Delete a session."""
+    store = ChatStore()
+    deleted = store.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session {session_id} not found"
+        )
 
 
 # ==============================================================================
@@ -181,10 +278,12 @@ async def chat(request: ChatRequest):
     Answer a question about indexed code.
     
     This endpoint:
-    1. Retrieves relevant code chunks
-    2. Builds structured prompt
-    3. Generates answer with LLM
-    4. Returns answer with sources
+    1. Loads prior conversation history if session_id is provided
+    2. Retrieves relevant code chunks
+    3. Builds structured prompt (with history as context)
+    4. Generates answer with LLM
+    5. Saves the Q&A turn back to the session
+    6. Returns answer with sources
     """
     logger.info(f"Chat request: {request.question[:100]}...")
     
@@ -213,14 +312,55 @@ async def chat(request: ChatRequest):
                 repository_name=request.repository_name,
                 language=request.language,
             )
+
+        # Load conversation history for context if session_id provided
+        custom_instruction = None
+        store = ChatStore()
+        session_id = request.session_id
+
+        if session_id:
+            session = store.get_session(session_id)
+            if not session:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Session {session_id} not found"
+                )
+            if session.messages:
+                # Build a history block to prepend to the system instruction
+                history_lines = []
+                for msg in session.messages[-10:]:  # Last 10 messages for context window
+                    prefix = "User" if msg.role == "user" else "Assistant"
+                    history_lines.append(f"{prefix}: {msg.content}")
+                history_text = "\n".join(history_lines)
+
+                custom_instruction = (
+                    "You are a code assistant that answers questions based ONLY on the "
+                    "provided code context.\n\n"
+                    "CONVERSATION HISTORY (for context only — do not answer old questions again):\n"
+                    f"{history_text}\n\n"
+                    "CRITICAL RULES:\n"
+                    "1. Answer ONLY using information from the code context below\n"
+                    "2. Always cite the specific file path, function/class name, and line numbers\n"
+                    "3. If the answer is not in the provided context, explicitly say "
+                    "\"I cannot find this information in the provided code\"\n"
+                    "4. Do NOT hallucinate function names, file paths, or code that doesn't "
+                    "exist in the context\n"
+                    "5. You may refer to the conversation history to understand follow-up questions"
+                )
         
         # Query
         response = rag_chain.query(
             question=request.question,
             filters=filters,
             max_tokens=request.max_tokens,
-            temperature=request.temperature
+            temperature=request.temperature,
+            custom_instruction=custom_instruction,
         )
+
+        # Persist this turn to session
+        if session_id:
+            store.add_message(session_id, role="user", content=request.question)
+            store.add_message(session_id, role="assistant", content=response.answer)
         
         # Convert to API response
         sources = [
@@ -236,14 +376,10 @@ async def chat(request: ChatRequest):
             for result in response.retrieval_context.results
         ]
         
-        # print("=" * 60)
-        # print("Provider:", settings.llm_provider)
-        # print("Model:", settings.llm_model)
-        # print("Token:", "YES" if settings.hf_token else "NO")
-        # print("=" * 60)
         return ChatResponse(
             question=response.question,
             answer=response.answer,
+            session_id=session_id,
             sources=sources,
             retrieval_stats={
                 "chunks_retrieved": len(response.retrieval_context.results),
@@ -259,6 +395,8 @@ async def chat(request: ChatRequest):
             total_time_seconds=response.total_time_seconds
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Chat failed: {e}")
         raise HTTPException(

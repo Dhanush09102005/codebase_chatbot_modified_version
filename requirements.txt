@@ -17,8 +17,8 @@ sentence-transformers>=2.6.0
 rank-bm25>=0.2.2
 
 # Code parsing (AST-based chunking)
-tree-sitter==0.21.3
-tree-sitter-languages>=1.10.0
+tree-sitter>=0.23.0
+tree-sitter-language-pack>=1.10.0
 
 # LLM inference
 huggingface-hub>=0.20.0
