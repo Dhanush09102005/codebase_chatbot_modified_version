@@ -23,6 +23,7 @@ class RepositoryMetadata:
     last_refresh_time: Optional[str] = None
     commit_sha: Optional[str] = None
     repository_name: str = "unknown"
+    repository_id: Optional[str] = None
     
     @classmethod
     def from_file(cls, repo_path: Path) -> Optional["RepositoryMetadata"]:

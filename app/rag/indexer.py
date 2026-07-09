@@ -318,6 +318,10 @@ class CodeIndexer:
         id_hash = hashlib.sha256(id_string.encode()).hexdigest()[:16]
         return f"chunk_{id_hash}"
     
+    def _hash_repository(self, repository_name: str) -> str:
+        """Create a stable hash for a repository name."""
+        return hashlib.sha256(repository_name.encode("utf-8")).hexdigest()[:16]
+
     def _prepare_metadata(self, chunk: CodeChunk) -> Dict[str, Any]:
         """
         Prepare consistent metadata dictionary for storage.

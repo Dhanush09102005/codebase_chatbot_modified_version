@@ -60,7 +60,70 @@ class CodeChunk:
         if isinstance(self.language, str):
             from app.ingestion import Language
             self.language = Language.from_string(self.language)
-    
+
+    def __getitem__(self, key: str) -> Any:
+        """Allow chunk objects to behave like dictionaries for compatibility."""
+        if key == "text":
+            return self.text
+        if key == "chunk_type":
+            return self.chunk_type
+        if key == "name":
+            return self.name
+        if key == "file_path":
+            return self.file_path
+        if key == "repository_name":
+            return self.repository_name
+        if key == "language":
+            return self.language.value if hasattr(self.language, "value") else self.language
+        if key == "line_start":
+            return self.line_start
+        if key == "line_end":
+            return self.line_end
+        if key == "line_count":
+            return self.line_count
+        if key == "char_count":
+            return self.char_count
+        if key == "metadata":
+            return self.metadata
+        if key == "embedding":
+            return self.embedding
+        if key == "bm25_score":
+            return self.bm25_score
+        if key == "vector_score":
+            return self.vector_score
+        if key == "combined_score":
+            return self.combined_score
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """Dictionary-style get for compatibility."""
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def keys(self) -> List[str]:
+        """Return dictionary-style keys for compatibility."""
+        return [
+            "text",
+            "chunk_type",
+            "name",
+            "file_path",
+            "repository_name",
+            "language",
+            "line_start",
+            "line_end",
+            "metadata",
+            "embedding",
+            "bm25_score",
+            "vector_score",
+            "combined_score",
+        ]
+
+    def __contains__(self, key: object) -> bool:
+        """Support membership checks like 'embedding' in chunk."""
+        return isinstance(key, str) and key in self.keys()
+
     @property
     def line_count(self) -> int:
         """Get number of lines in this chunk."""
@@ -78,7 +141,7 @@ class CodeChunk:
         Returns:
             dict: Chunk data suitable for ChromaDB or JSON
         """
-        return {
+        data = {
             "text": self.text,
             "chunk_type": self.chunk_type,
             "name": self.name,
@@ -91,6 +154,15 @@ class CodeChunk:
             "char_count": self.char_count,
             "metadata": self.metadata,
         }
+        if self.embedding is not None:
+            data["embedding"] = self.embedding
+        if self.bm25_score is not None:
+            data["bm25_score"] = self.bm25_score
+        if self.vector_score is not None:
+            data["vector_score"] = self.vector_score
+        if self.combined_score is not None:
+            data["combined_score"] = self.combined_score
+        return data
     
     def __str__(self) -> str:
         """String representation."""
