@@ -2,6 +2,10 @@
 
 RAG-based chatbot for answering questions about codebases using semantic search and LLM generation.
 
+# Deployed link
+
+https://codebase-chatbot-modified-version.onrender.com
+
 ## Features
 
 - **AST-Based Parsing**: Semantic code understanding (not arbitrary text splitting)
