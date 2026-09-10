@@ -103,7 +103,11 @@ async def index_repository(request: IndexRepositoryRequest):
         
         # Step 2: Scan files
         logger.info("Step 2/6: Scanning files...")
-        code_files = scanner.scan(repo_path,repository_name=repo_info["repo_name"])
+        code_files = scanner.scan(
+            repo_path,
+            repository_name=repo_info["repo_name"],
+            repository_id=repo_info["repo_id"],
+        )
             # code_files = scanner.scan(repo_path)
         
         if not code_files:
@@ -208,8 +212,9 @@ async def chat(request: ChatRequest):
         
         # Build filters
         filters = None
-        if request.repository_name or request.language:
+        if request.repository_id or request.repository_name or request.language:
             filters = RetrievalFilters(
+                repository_id=request.repository_id,
                 repository_name=request.repository_name,
                 language=request.language,
             )
@@ -219,7 +224,8 @@ async def chat(request: ChatRequest):
             question=request.question,
             filters=filters,
             max_tokens=request.max_tokens,
-            temperature=request.temperature
+            temperature=request.temperature,
+            chat_history=[message.dict() for message in request.chat_history],
         )
         
         # Convert to API response
@@ -247,7 +253,10 @@ async def chat(request: ChatRequest):
             sources=sources,
             retrieval_stats={
                 "chunks_retrieved": len(response.retrieval_context.results),
+                "total_candidates": response.retrieval_context.total_candidates,
+                "reranked_count": response.retrieval_context.reranked_count,
                 "retrieval_time_seconds": response.retrieval_context.retrieval_time_seconds,
+                "retrieval_query": response.metadata.get("retrieval_query"),
             },
             llm_stats={
                 "model": response.llm_response.model,
@@ -388,11 +397,14 @@ async def delete_repository(repository_id: str):
         
         # Delete chunks from vector store by repository_id
         indexer = CodeIndexer()
-        print(indexer.vector_store.collection.peek(1)["metadatas"][0])
         chunks_deleted = indexer.vector_store.delete_by_metadata(
-            where={"repository_name": metadata["repository_name"]}
+            where={"repository_id": repository_id}
         )
-        
+
+        if chunks_deleted == 0:
+            chunks_deleted = indexer.vector_store.delete_by_metadata(
+                where={"repository_name": metadata["repository_name"]}
+            )
         logger.info(f"Deleted {chunks_deleted} chunks from vector store")
         
         # Delete cached repository files
@@ -403,7 +415,6 @@ async def delete_repository(repository_id: str):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to delete repository files"
             )
-        print("Deleting repository_id:", repository_id)
         return DeleteRepositoryResponse(
             repository_id=repository_id,
             status="deleted",

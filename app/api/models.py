@@ -54,6 +54,13 @@ class IndexRepositoryResponse(BaseModel):
 # Chat / Q&A
 # ==============================================================================
 
+class ChatMessage(BaseModel):
+    """A prior chat message used for conversational memory."""
+
+    role: str = Field(..., description="Message role: user or assistant")
+    content: str = Field(..., description="Message text")
+
+
 class ChatRequest(BaseModel):
     """Request to answer a question about code."""
     
@@ -84,6 +91,10 @@ class ChatRequest(BaseModel):
         description="LLM sampling temperature (0.0-1.0)",
         ge=0.0,
         le=1.0
+    )
+    chat_history: List[ChatMessage] = Field(
+        default_factory=list,
+        description="Previous turns to use as conversation memory"
     )
 
 

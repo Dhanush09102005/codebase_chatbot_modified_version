@@ -67,7 +67,7 @@ def show_api_overview():
     print("       {")
     print('         "file_path": "fastapi/dependencies.py",')
     print('         "chunk_name": "get_dependant",')
-    print('         "start_line": 42,')
+    print('         "line_start": 42,')
     print('         "end_line": 89,')
     print('         "relevance_score": 0.87')
     print("       }")

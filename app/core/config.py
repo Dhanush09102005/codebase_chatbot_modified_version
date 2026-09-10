@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Prompt Builder Configuration
     prompt_include_line_numbers: bool = True
     prompt_include_chunk_types: bool = True
-    prompt_max_chunks: int = 5
+    prompt_max_chunks: int = 8
     prompt_instruction_style: str = "strict"  # "strict" or "flexible"
     
     # Embedding Model
@@ -61,9 +61,9 @@ class Settings(BaseSettings):
     hybrid_alpha: float = 0.5  # Balance between BM25 and vector similarity
     
     # Retrieval Configuration
-    retrieval_top_k: int = 10  # Initial candidates
-    rerank_top_k: int = 5  # Final results after reranking
-    min_similarity_score: float = 0.3  # Minimum score threshold
+    retrieval_top_k: int = 30  # Initial candidates
+    rerank_top_k: int = 8  # Final results after reranking
+    min_similarity_score: float = 0.2  # Minimum score threshold
     enable_metadata_filtering: bool = True  # Filter by language, repo, etc.
     enable_reranking: bool = True  # Rerank results by relevance
     
