@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import List, Optional
 import os
 import hashlib
+import json
 
 from app.core import logger, settings
 from app.ingestion.models import CodeFile
@@ -66,10 +67,11 @@ class FileScanner:
         )
     
     def scan(
-    self,
-    repo_path: Path,
-    repository_name: Optional[str] = None,
-) -> List[CodeFile]:
+        self,
+        repo_path: Path,
+        repository_name: Optional[str] = None,
+        repository_id: Optional[str] = None,
+    ) -> List[CodeFile]:
         """
         Scan repository and return CodeFile objects with language detection and hashing.
         
@@ -96,6 +98,7 @@ class FileScanner:
         
         repo_path = repo_path.resolve()
         repo_name = repository_name or repo_path.name
+        repo_id = repository_id or self._load_repository_id(repo_path)
         logger.info(f"Scanning repository: {repo_path} (name: {repo_name})")
         
         code_files = []
@@ -125,7 +128,7 @@ class FileScanner:
                 
                 # Create CodeFile object with language detection and hashing
                 try:
-                    code_file = self._create_code_file(file_path, repo_path, repo_name)
+                    code_file = self._create_code_file(file_path, repo_path, repo_name, repo_id)
                     code_files.append(code_file)
                 except Exception as e:
                     logger.warning(f"Failed to create CodeFile for {file_path}: {e}")
@@ -135,6 +138,23 @@ class FileScanner:
             f"Scan complete: {len(code_files)} files found, {skipped_count} skipped in {repo_path}"
         )
         return code_files
+
+    def _load_repository_id(self, repo_path: Path) -> str:
+        """Load stable repository id from metadata, falling back to folder suffix."""
+        metadata_file = repo_path / ".repo_metadata.json"
+        if metadata_file.exists():
+            try:
+                with open(metadata_file, "r", encoding="utf-8") as f:
+                    metadata = json.load(f)
+                if metadata.get("repository_id"):
+                    return metadata["repository_id"]
+            except Exception as e:
+                logger.debug(f"Could not read repository metadata for {repo_path}: {e}")
+
+        parts = repo_path.name.rsplit("_", 1)
+        if len(parts) == 2 and len(parts[1]) == 12:
+            return parts[1]
+        return repo_path.name
     
     def _filter_directories(self, dirs: list, current_path: Path) -> list:
         """
@@ -250,6 +270,7 @@ class FileScanner:
         file_path: Path,
         repo_root: Path,
         repo_name: str,
+        repo_id: str,
     ) -> CodeFile:
         """
         Create a CodeFile object from a file path.
@@ -273,6 +294,7 @@ class FileScanner:
             relative_path=relative_path,
             repository_root=repo_root,
             repository_name=repo_name,
+            repository_id=repo_id,
             language=language,
             extension=extension,
             size=size,

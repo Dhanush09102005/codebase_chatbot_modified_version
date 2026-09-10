@@ -23,6 +23,7 @@ class CodeFile:
         relative_path: Relative path from repository root (for display/retrieval)
         repository_root: Path to the repository this file belongs to
         repository_name: Name of the repository (e.g., "fastapi", "projecthub")
+        repository_id: Stable repository identifier
         language: Programming language (Language enum for type safety)
         extension: File extension (e.g., '.py', '.js')
         size: File size in bytes
@@ -54,6 +55,7 @@ class CodeFile:
     extension: str
     size: int
     content_hash: str  # SHA-256 for incremental indexing
+    repository_id: str = "unknown"
     
     # Parser enrichment (Parser stage)
     imports: Optional[List[str]] = None
@@ -137,6 +139,7 @@ class CodeFile:
             "relative_path": str(self.relative_path),
             "repository_root": str(self.repository_root),
             "repository_name": self.repository_name,
+            "repository_id": self.repository_id,
             "language": self.language.value,
             "extension": self.extension,
             "size": self.size,

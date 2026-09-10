@@ -9,7 +9,6 @@ Supports:
 - Safe refresh with cleanliness verification
 - SHA-256 based repository identifiers
 """
-import inspect
 import git
 import shutil
 import hashlib
@@ -422,9 +421,6 @@ class RepositoryManager:
             if not repo_path.is_relative_to(self.storage_path):
                 logger.warning(f"Cannot delete {repo_path} - not in storage path")
                 return False
-            print(inspect.getfile(RepositoryManager))
-            print("_remove_readonly" in globals())
-            print(globals().get("_remove_readonly"))
             shutil.rmtree(repo_path, onerror=_remove_readonly)
 
             logger.info(f"Deleted repository at {repo_path}")
@@ -452,7 +448,7 @@ class RepositoryManager:
                 if metadata:
                     repos.append({
                         "name": repo_dir.name,
-                        "repository_id": self._hash_url(metadata.url),
+                        "repository_id": metadata.repository_id or self._hash_url(metadata.url),
                         "path": str(repo_dir),
                         "url": metadata.url,
                         "branch": metadata.branch,

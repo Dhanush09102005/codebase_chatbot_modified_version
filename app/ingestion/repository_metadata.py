@@ -23,6 +23,7 @@ class RepositoryMetadata:
     last_refresh_time: Optional[str] = None
     commit_sha: Optional[str] = None
     repository_name: str = "unknown"
+    repository_id: Optional[str] = None
     
     @classmethod
     def from_file(cls, repo_path: Path) -> Optional["RepositoryMetadata"]:
@@ -42,6 +43,8 @@ class RepositoryMetadata:
         try:
             with open(metadata_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            allowed_fields = cls.__dataclass_fields__.keys()
+            data = {key: value for key, value in data.items() if key in allowed_fields}
             return cls(**data)
         except Exception:
             return None
