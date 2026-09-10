@@ -1,73 +1,52 @@
 """
 RAG pipeline components for code understanding and retrieval.
 
-Complete pipeline:
-  Parser → Chunker → Embedder → Indexer → Retriever → LLM Chain → Answer
+This package exposes the main pipeline types while tolerating optional
+dependencies during lightweight retrieval-only checks.
 """
-from app.rag.parser import CodeParser
-from app.rag.chunk_models import CodeChunk, ChunkingResult
-from app.rag.base_chunker import BaseChunker, TextChunker
-from app.rag.ast_chunker import ASTChunker
-from app.rag.embedding_models import (
-    EmbeddingModel,
-    SentenceTransformerModel,
-    HuggingFaceModel,
-    create_embedding_model,
-)
-from app.rag.embedder import CodeEmbedder, EmbeddingCache
-from app.rag.vector_store import VectorStore, ChromaVectorStore
-from app.rag.indexer import CodeIndexer, IndexingStats
-from app.rag.retrieval_models import RetrievalResult, RetrievalFilters, RetrievalContext
-from app.rag.retriever import CodeRetriever
-from app.rag.llm_client import (
-    LLMClient,
-    LLMResponse,
-    HuggingFaceLLMClient,
-    GroqLLMClient,
-    OpenAILLMClient,
-    OllamaLLMClient,
-    create_llm_client,
-)
-from app.rag.prompt_builder import PromptBuilder
-from app.rag.rag_chain import RAGChain, RAGResponse
+from importlib import import_module
 
-__all__ = [
-    # Parser
-    "CodeParser",
-    # Chunker
-    "CodeChunk",
-    "ChunkingResult",
-    "BaseChunker",
-    "TextChunker",
-    "ASTChunker",
-    # Embedder
-    "EmbeddingModel",
-    "SentenceTransformerModel",
-    "HuggingFaceModel",
-    "create_embedding_model",
-    "CodeEmbedder",
-    "EmbeddingCache",
-    # Vector Store & Indexer
-    "VectorStore",
-    "ChromaVectorStore",
-    "CodeIndexer",
-    "IndexingStats",
-    # Retriever
-    "RetrievalResult",
-    "RetrievalFilters",
-    "RetrievalContext",
-    "CodeRetriever",
-    # LLM Client
-    "LLMClient",
-    "LLMResponse",
-    "HuggingFaceLLMClient",
-    "GroqLLMClient",
-    "OpenAILLMClient",
-    "OllamaLLMClient",
-    "create_llm_client",
-    # Prompt Builder
-    "PromptBuilder",
-    # RAG Chain
-    "RAGChain",
-    "RAGResponse",
-]
+
+__all__ = []
+
+
+def _export(module_name: str, names: list[str]) -> None:
+    """Best-effort export so optional deps do not break unrelated imports."""
+    try:
+        module = import_module(module_name)
+    except Exception:
+        return
+
+    for name in names:
+        if hasattr(module, name):
+            globals()[name] = getattr(module, name)
+            __all__.append(name)
+
+
+_export("app.rag.parser", ["CodeParser"])
+_export("app.rag.chunk_models", ["CodeChunk", "ChunkingResult"])
+_export("app.rag.base_chunker", ["BaseChunker", "TextChunker"])
+_export("app.rag.ast_chunker", ["ASTChunker"])
+_export(
+    "app.rag.embedding_models",
+    ["EmbeddingModel", "SentenceTransformerModel", "HuggingFaceModel", "create_embedding_model"],
+)
+_export("app.rag.embedder", ["CodeEmbedder", "EmbeddingCache"])
+_export("app.rag.vector_store", ["VectorStore", "ChromaVectorStore"])
+_export("app.rag.indexer", ["CodeIndexer", "IndexingStats"])
+_export("app.rag.retrieval_models", ["RetrievalResult", "RetrievalFilters", "RetrievalContext"])
+_export("app.rag.retriever", ["CodeRetriever"])
+_export(
+    "app.rag.llm_client",
+    [
+        "LLMClient",
+        "LLMResponse",
+        "HuggingFaceLLMClient",
+        "GroqLLMClient",
+        "OpenAILLMClient",
+        "OllamaLLMClient",
+        "create_llm_client",
+    ],
+)
+_export("app.rag.prompt_builder", ["PromptBuilder"])
+_export("app.rag.rag_chain", ["RAGChain", "RAGResponse"])

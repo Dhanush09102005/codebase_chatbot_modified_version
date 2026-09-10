@@ -11,9 +11,10 @@ Workflow:
 4. Call LLM client to generate answer
 5. Return answer with metadata
 """
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
 import time
+import re
 
 from app.core import logger
 from app.rag.retriever import CodeRetriever
@@ -156,6 +157,7 @@ class RAGChain:
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         custom_instruction: Optional[str] = None,
+        chat_history: Optional[List[Dict[str, str]]] = None,
     ) -> RAGResponse:
         """
         Execute complete RAG workflow.
@@ -180,10 +182,12 @@ class RAGChain:
         start_time = time.time()
         
         try:
+            retrieval_query = self._build_retrieval_query(question, chat_history or [])
+
             # Step 1: Retrieve relevant chunks
             logger.info("Step 1/3: Retrieving relevant code chunks...")
             retrieval_context = self.retriever.retrieve(
-                query=question,
+                query=retrieval_query,
                 filters=filters
             )
             
@@ -212,7 +216,10 @@ class RAGChain:
                     llm_response=empty_response,
                     total_time_seconds=total_time,
                     prompt_used="",
-                    metadata={"status": "no_chunks_found"}
+                    metadata={
+                        "status": "no_chunks_found",
+                        "retrieval_query": retrieval_query,
+                    }
                 )
             
             # Step 2: Build prompt
@@ -220,7 +227,8 @@ class RAGChain:
             prompt = self.prompt_builder.build_prompt(
                 question=question,
                 retrieval_results=retrieval_context.results,
-                custom_instruction=custom_instruction
+                custom_instruction=custom_instruction,
+                chat_history=chat_history
             )
             
             logger.info(f"Prompt built: {len(prompt)} characters")
@@ -252,6 +260,7 @@ class RAGChain:
                 metadata={
                     "status": "success",
                     "chunks_used": len(retrieval_context.results),
+                    "retrieval_query": retrieval_query,
                 }
             )
             
@@ -262,6 +271,79 @@ class RAGChain:
         except Exception as e:
             logger.error(f"RAG query failed: {e}")
             raise
+
+    def _build_retrieval_query(
+        self,
+        question: str,
+        chat_history: List[Dict[str, str]],
+    ) -> str:
+        """
+        Expand follow-up questions with recent conversation context before retrieval.
+
+        The LLM prompt can use chat memory after retrieval, but vector search needs
+        enough concrete terms up front. This keeps retrieval deterministic and avoids
+        an extra LLM call while still carrying subjects like class names, methods,
+        file paths, and source citations into ambiguous follow-ups.
+        """
+        if not chat_history:
+            return question
+
+        context_parts = []
+        for message in chat_history[-6:]:
+            role = str(message.get("role", "")).strip().lower()
+            if role not in {"user", "assistant"}:
+                continue
+
+            content = str(message.get("content", "")).strip()
+            if not content:
+                continue
+
+            context_parts.append(f"{role}: {content[:1200]}")
+
+        if not context_parts:
+            return question
+
+        recent_context = "\n".join(context_parts)
+        code_terms = self._extract_code_terms(recent_context)
+        term_section = f"\nRelevant code terms: {' '.join(code_terms)}" if code_terms else ""
+
+        return (
+            "Use the recent conversation to resolve references in the current "
+            "question before searching code.\n\n"
+            f"Recent conversation:\n{recent_context}"
+            f"{term_section}\n\n"
+            f"Current question: {question}"
+        )
+
+    def _extract_code_terms(self, text: str) -> List[str]:
+        """Pull code-like identifiers and paths out of memory for retrieval."""
+        candidates = re.findall(
+            r"`([^`]+)`|([\w./\\-]+\.\w+)|([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)",
+            text,
+        )
+        terms = []
+        seen = set()
+        stop_words = {
+            "the", "and", "for", "that", "this", "with", "from", "what",
+            "which", "does", "into", "class", "function", "method", "lines",
+            "user", "assistant", "source", "sources",
+        }
+
+        for groups in candidates:
+            term = next((group for group in groups if group), "").strip()
+            if not term:
+                continue
+            if term.lower() in stop_words:
+                continue
+            if len(term) < 3 and "." not in term:
+                continue
+            if term not in seen:
+                seen.add(term)
+                terms.append(term)
+            if len(terms) >= 30:
+                break
+
+        return terms
     
     def query_batch(
         self,

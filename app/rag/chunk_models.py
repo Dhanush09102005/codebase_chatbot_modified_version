@@ -31,6 +31,7 @@ class CodeChunk:
         name: Name of the function/class/module
         file_path: Relative path to source file
         repository_name: Repository this chunk belongs to
+        repository_id: Stable repository identifier
         language: Programming language
         line_start: Starting line number (for jump-to-definition)
         line_end: Ending line number
@@ -46,6 +47,7 @@ class CodeChunk:
     line_start: int
     line_end: int
     metadata: Dict[str, Any] = field(default_factory=dict)
+    repository_id: str = "unknown"
     
     # Embeddings (added by Embedder stage)
     embedding: Optional[List[float]] = None
@@ -84,6 +86,7 @@ class CodeChunk:
             "name": self.name,
             "file_path": self.file_path,
             "repository_name": self.repository_name,
+            "repository_id": self.repository_id,
             "language": self.language.value,
             "line_start": self.line_start,
             "line_end": self.line_end,
@@ -118,6 +121,7 @@ class ChunkingResult:
     repository_name: str
     language: Language
     chunks: List[CodeChunk]
+    repository_id: str = "unknown"
     
     # Statistics
     total_chunks: int = 0
@@ -141,6 +145,7 @@ class ChunkingResult:
         return {
             "file_path": self.file_path,
             "repository_name": self.repository_name,
+            "repository_id": self.repository_id,
             "language": self.language.value,
             "total_chunks": self.total_chunks,
             "function_chunks": self.function_chunks,

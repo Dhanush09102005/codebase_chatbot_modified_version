@@ -116,6 +116,7 @@ class TextChunker(BaseChunker):
                     name=f"chunk_{chunk_num}",
                     file_path=code_file.relative_path_str,
                     repository_name=code_file.repository_name,
+                    repository_id=code_file.repository_id,
                     language=code_file.language,
                     line_start=lines_before + 1,
                     line_end=lines_before + lines_in_chunk + 1,

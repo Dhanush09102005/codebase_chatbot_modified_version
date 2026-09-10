@@ -228,7 +228,7 @@ class CodeIndexer:
             embeddings_batch.append(chunk.embedding)
             documents_batch.append(chunk.text)
             metadatas_batch.append(self._prepare_metadata(chunk))
-            
+
             # Batch insert when batch is full
             if len(ids_batch) >= self.batch_size:
                 success = self._insert_batch(
@@ -307,7 +307,7 @@ class CodeIndexer:
             str: Stable chunk ID
         """
         id_string = (
-            f"{chunk.repository_name}/"
+            f"{chunk.repository_id}/"
             f"{chunk.file_path}/"
             f"{chunk.chunk_type}/"
             f"{chunk.name}/"
@@ -333,7 +333,7 @@ class CodeIndexer:
         """
         metadata = {
             # Core identifiers
-            "repository_id": self._hash_repository(chunk.repository_name), 
+            "repository_id": chunk.repository_id,
             "repository_name": chunk.repository_name,
             "file_path": chunk.file_path,
             "language": chunk.language.value,
@@ -373,10 +373,6 @@ class CodeIndexer:
             if "docstring" in chunk.metadata:
                 docstring = chunk.metadata["docstring"]
                 metadata["docstring"] = docstring[:200]  # Truncate for storage
-        # print(metadata["repository_name"])
-        # print(self.vector_store.collection.peek())
-        print("Repository name :", chunk.repository_name)
-        print("Repository id   :", self._hash_repository(chunk.repository_name))
         return metadata
     
     def _insert_batch(

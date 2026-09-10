@@ -29,6 +29,7 @@ class RetrievalResult:
     
     # Rich metadata (from indexing)
     repository_name: Optional[str] = None
+    repository_id: Optional[str] = None
     file_path: Optional[str] = None
     language: Optional[str] = None
     chunk_type: Optional[str] = None  # function, class, method, import
@@ -82,6 +83,7 @@ class RetrievalResult:
             "combined_score": self.combined_score,
             "rerank_score": self.rerank_score,
             "repository_name": self.repository_name,
+            "repository_id": self.repository_id,
             "file_path": self.file_path,
             "language": self.language,
             "chunk_type": self.chunk_type,
@@ -103,6 +105,7 @@ class RetrievalFilters:
     """
     
     repository_name: Optional[str] = None
+    repository_id: Optional[str] = None
     file_path: Optional[str] = None  # Exact or prefix match
     language: Optional[Language] = None
     chunk_type: Optional[str] = None  # function, class, method
@@ -117,8 +120,16 @@ class RetrievalFilters:
         """
         conditions = []
 
+        repo_conditions = []
+        if self.repository_id:
+            repo_conditions.append({"repository_id": self.repository_id})
         if self.repository_name:
-            conditions.append({"repository_name": self.repository_name})
+            repo_conditions.append({"repository_name": self.repository_name})
+
+        if len(repo_conditions) == 1:
+            conditions.append(repo_conditions[0])
+        elif len(repo_conditions) > 1:
+            conditions.append({"$or": repo_conditions})
 
         if self.file_path:
             if "*" in self.file_path or self.file_path.endswith("/"):
@@ -156,6 +167,7 @@ class RetrievalFilters:
         """Check if any filters are set."""
         return any([
             self.repository_name,
+            self.repository_id,
             self.file_path,
             self.language,
             self.chunk_type,

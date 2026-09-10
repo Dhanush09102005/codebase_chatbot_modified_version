@@ -4,7 +4,7 @@ Prompt builder for RAG queries.
 The prompt builder ONLY formats prompts.
 It does NOT retrieve chunks, call LLMs, or orchestrate workflows.
 """
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.rag.retrieval_models import RetrievalResult
 
 
@@ -26,7 +26,7 @@ class PromptBuilder:
         self,
         include_line_numbers: bool = True,
         include_chunk_types: bool = True,
-        max_chunks_in_prompt: int = 5,
+        max_chunks_in_prompt: int = 8,
         instruction_style: str = "strict"
     ):
         """
@@ -47,7 +47,8 @@ class PromptBuilder:
         self,
         question: str,
         retrieval_results: List[RetrievalResult],
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        chat_history: Optional[List[Dict[str, str]]] = None
     ) -> str:
         """
         Build prompt from question and retrieval results.
@@ -68,6 +69,8 @@ class PromptBuilder:
         
         # Build context section
         context = self._build_context_section(chunks_to_use)
+
+        memory = self._build_memory_section(chat_history or [])
         
         # Build complete prompt
         prompt = f"""{instruction}
@@ -75,6 +78,8 @@ class PromptBuilder:
 # CODE CONTEXT
 
 {context}
+
+{memory}
 
 # QUESTION
 
@@ -84,6 +89,24 @@ class PromptBuilder:
 
 """
         return prompt
+
+    def _build_memory_section(self, chat_history: List[Dict[str, str]]) -> str:
+        """Format recent turns so follow-up questions have conversational context."""
+        if not chat_history:
+            return ""
+
+        recent_messages = chat_history[-6:]
+        lines = ["# CONVERSATION MEMORY", ""]
+        for message in recent_messages:
+            role = str(message.get("role", "")).strip().lower()
+            if role not in {"user", "assistant"}:
+                continue
+            content = str(message.get("content", "")).strip()
+            if not content:
+                continue
+            lines.append(f"{role.upper()}: {content[:1200]}")
+
+        return "\n".join(lines)
     
     def _get_system_instruction(self) -> str:
         """
@@ -102,11 +125,15 @@ CRITICAL RULES:
 4. Do NOT make assumptions or use external knowledge
 5. Do NOT hallucinate function names, file paths, or code that doesn't exist in the context
 6. Be precise and reference specific code locations
+7. Conversation memory is only for understanding the user's follow-up, not a source of code facts
+8. If the retrieved chunks are insufficient or only loosely related, say what is missing instead of guessing
+9. Do not describe methods, classes, parameters, return values, or control flow unless they appear in CODE CONTEXT
 
 When citing code:
 - Format: "In `path/to/file.py`, the function `function_name` (lines X-Y)..."
 - Always include the repository name if available
-- Quote relevant code snippets when helpful"""
+- Quote relevant code snippets when helpful
+- Prefer concise, direct answers grounded in the retrieved chunks"""
         
         else:  # flexible
             return """You are a helpful code assistant. Answer the user's question based on the provided code context.

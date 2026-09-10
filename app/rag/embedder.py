@@ -83,7 +83,7 @@ class CodeEmbedder:
         
         try:
             # Convert chunk dicts to CodeChunk objects
-            print(code_file.chunks[0])
+            # print(code_file.chunks[0])
             chunks = code_file.chunks
             
             # Embed chunks
