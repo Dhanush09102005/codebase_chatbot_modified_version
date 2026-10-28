@@ -4,7 +4,7 @@ RAG-based chatbot for answering questions about codebases using semantic search 
 
 # Deployed link
 
-https://codebase-chatbot-modified-version.onrender.com
+https://https://codebase-chatbot-modified-version.onrender.com/docs
 
 ## Features
 
