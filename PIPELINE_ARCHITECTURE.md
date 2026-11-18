@@ -13,7 +13,7 @@ This is the same pattern used in:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    CODE Q&A ASSISTANT PIPELINE                   │
+│                    CODE Q&A ASSISTANT PIPELINE                  │
 └─────────────────────────────────────────────────────────────────┘
 
 1. RepositoryManager
